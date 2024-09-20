@@ -1,0 +1,536 @@
+---
+title: "Project - PBC"
+author: "Brianna Cirillo"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(echo=FALSE)
+``` 
+ 
+# Data
+Primary Biliary Cholangitis: an autoimmune disease leading to destruction of the small bile ducts in the liver. Progression is slow but inexorable, eventually leading to cirrhosis and liver decompensation.
+
+Data Collection: data is from the Mayo Clinic trial in PBC conducted between 1974 and 1984. A total of 424 PBC patients, referred to Mayo Clinic during that ten-year interval, met eligibility criteria for the randomized placebo controlled trial of the drug D-penicillamine. The first 312 cases in the data set participated in the randomized trial and contain largely complete data. The additional 112 cases did not participate in the clinical trial, but consented to have basic measurements recorded and to be followed for survival. Six of those cases were lost to follow-up shortly after diagnosis, so the data here are on an additional 106 cases as well as the 312 randomized participants.
+
+Columns:
+age: in years
+
+albumin:	serum albumin (g/dl)
+  -> A protein made by the liver. Serum Albumin test measures the amoint of this protein in the clear liquid portion of the blood. Plays an important role in keeping the fluid in the blood from leaking into the tissues. Can help determine if you have liver or kidney disease.
+  
+alk.phos:	alkaline phosphatase (U/liter)
+  -> Alkaline phosphatase (ALP) is an enzyme that’s found throughout your body. ALP blood tests measure the level of ALP in your blood that comes from your liver and bones, and it’s one of the tests included in a comprehensive metabolic panel. High levels of ALP in your blood may indicate liver disease or certain bone disorders.
+  
+ascites:	presence of ascites
+  -> Ascites is a condition in which fluid collects in spaces within your abdomen. Ascites can set the stage for an infection in your abdomen. Fluid may also move into your chest and surround your lungs. The most common cause of ascites is cirrhosis of the liver.
+  
+ast:	aspartate aminotransferase, once called SGOT (U/ml)
+  -> AST is an enzyme your liver makes. Other organs, like your heart, kidneys, brain, and muscles, also make smaller amounts. AST is also called SGOT (serum glutamic-oxaloacetic transaminase). Normally, AST levels in your blood are low. When your liver is damaged, it puts more AST into your blood, and your levels rise. The aspartate aminotransferase (AST) test is a blood test that checks for liver damage.
+  
+bili:	serum bilirubin (mg/dl)
+  -> Serum bilirubin is a yellowish pigment that is made during the breakdown of red blood cells. Bilirubin passes through the liver and is eventually excreted out of the body. Higher than usual levels of bilirubin may indicate different types of liver or bile duct problems. 
+
+chol:	serum cholesterol (mg/dl)
+  -> Serum cholesterol level represents the amount of total cholesterol in their blood. Comprises the amount of high-density lipoprotein (HDL), low-density lipoprotein (LDL), and triglycerides in the blood. Triglycerides are a type of fat bundled with cholesterol. A person’s serum cholesterol level can indicate their risk of developing conditions such as heart disease.
+  
+copper:	urine copper (ug/day)
+  -> The urine is tested for the amount of copper present. The copper urine test is used to determine the presence of diseases of the liver.
+  
+edema:	0 no edema, 0.5 untreated or successfully treated, 1 edema despite diuretic therapy
+  -> Edema is swelling caused by excess fluid trapped in your body's tissues. Although edema can affect any part of your body, you may notice it more in your hands, arms, feet, ankles and legs.
+  
+
+hepato:	presence of hepatomegaly or enlarged liver
+  -> An enlarged liver is one that's bigger than normal. Rather than a disease, an enlarged liver is a sign of an underlying problem, such as liver disease, congestive heart failure or cancer.
+  
+id:	case number
+
+platelet:	platelet count
+
+protime:	standardised blood clotting time
+
+sex:	m/f
+
+spiders:	blood vessel malformations in the skin
+
+stage:	histologic stage of disease (needs biopsy)
+
+status:	status at endpoint, 0/1/2 for censored, transplant, dead (Transplant was considered as censored)
+
+time:	number of days between registration and the earlier of death, transplantion, or study analysis in July, 1986
+
+trt:	1/2/NA for D-penicillmain, placebo, not randomised
+
+trig:	triglycerides (mg/dl)
+
+# Libraries
+
+```{r, message=FALSE}
+# Libraries Used
+library(tidyr)
+library(survival)
+library(mosaic)
+library(DescTools)
+library(gmodels)
+library(stargazer)
+library(ggplot2)
+library(tibble)
+library(survminer)
+library(asaur)
+```
+
+
+# Data Cleaning
+ 
+```{r, include=FALSE}
+options(scipen=999) # Turn off scientific notation
+rm(list = ls()) # Clear the Decks
+
+# Load R Data
+data("pbc", package = "survival")
+as_tibble(str(pbc))
+
+# removed samples that are not randomized:
+pbc_rand.df <- subset(pbc, trt != "not randomized") 
+
+# Check for NAs
+# colSums(is.na(pbc_rand.df)) 
+
+pbc.df <- na.omit(pbc_rand.df)
+
+# confirm the NAs have been removed
+# colSums(is.na(pbc.df))
+
+# Creating survtime in years
+pbc.df$survtime <- pbc.df$time/365
+
+# Making A No Transplant Data Set
+pbc.df$status[pbc.df$status == 1] <- 0
+pbc.df$status[pbc.df$status == 2] <- 1
+
+# Creating survival data
+pbc.surv <- Surv(pbc.df$survtime, pbc.df$status)
+
+# Creating Factors
+pbc.df$stage <- factor(pbc.df$stage)
+pbc.df$edema <- factor(pbc.df$edema)
+pbc.df$spiders <- factor(pbc.df$spiders)
+pbc.df$hepato <- factor(pbc.df$hepato)
+pbc.df$ascites <- factor(pbc.df$ascites)
+pbc.df$sex <- factor(pbc.df$sex)
+
+# Data
+status <- pbc.df$status
+time <- pbc.df$survtime
+trt <- pbc.df$trt
+stage <- pbc.df$stage
+```
+
+# Descriptives
+
+## All Descriptives
+```{r}
+stargazer(pbc.df, type="text",median=TRUE)
+```
+
+### Crosstab of Treatment	x	Event
+```{r}
+CrossTable(pbc.df$trt,pbc.df$status, digits=2, prop.c=FALSE, prop.t=FALSE, prop.chisq=FALSE, expected=FALSE,dnn=c("Randomi
+zation/Treatment", "Event"))
+```
+
+Among 136 randomized to the control group, there were 57 deaths (42%).
+Among 140 randomized to DPCA, there were 54 deaths (39%).
+
+Something to note is the amount of censored subjects. There is large number of censored subjects one must question how the study was carried out or if the treatment was ineffective resulting in subjects leaving the study to pursue different therapies. But, we should also note that whether someone neither died nor was censored, rather they had a transplant instead was censored in this analysis due to us not learning about informative censoring.
+
+# Model Free
+
+## Kaplan-Meier No Predictor
+```{r}
+km.nopred <- survfit(Surv(time, status) ~ 1)
+km.nopred
+
+# Graphical
+plot(km.nopred, xlab="Years on Study",
+ ylab="Percent Surviving (%)", yscale=100, cex.lab=0.75,
+ main="I. DPCA Study of Primary Biliary Cirrhosis \nKaplan-Meier Survival (95% CI) - Overall", cex.main=0.75)
+```
+Thus, we can see that the median survival time is 9.2 years, with a 95% Confidence interval of (7.8, 10.5). Meaning that we are 95% certain that the true median survival time is captured between (7.8, 10.5). Or, that if 100 confidence intervals are created 95 of them will contain the true median survival time.
+
+From the plot we can see that the survival time decreases until approximately 25% Surviving.
+
+## Kaplan-Meier Predictor = Treatment
+```{r}
+# Trt = 1: DPCA
+# Trt = 2: Control
+
+km.trt <- survfit(Surv(time, status) ~ trt, conf.type = "log-log", conf.int = .95)
+km.trt
+# Graphical
+plot(km.trt,
+ xlab="Years on Study",
+ main="II. DPCA Study of Primary Biliary Cirrhosis \nKaplan-Meier Survival (95% CI) - By Group",
+ ylab="Percent Surviving",yscale=100,col=c("red","blue"),
+ cex.main=0.75,cex.lab=0.75)
+legend("topright",
+ title="Treatment",c("Control","DPCA"),
+ fill=c("red","blue"),
+ cex=0.75,
+ box.lty=0)
+```
+Thus, we can see that the median survival time for patients randomized to the DPCA treatment is 8.45 years, with a 95% Confidence interval of (6.54, 11.2). Meaning that we are 95% certain that the true median survival time for patients randomized to the DPCA treatment is captured between (6.54, 11.2). 
+
+The median survival time for patients randomized to the control is 9.39 years, with a 95% Confidence interval of (8.47, 10.6). Meaning that we are 95% certain that the true median survival time for patients randomized to the control is captured between (8.47, 10.6). 
+
+From the plot we can see that the survival distributions seem to be very similar, with the control dropping slightly below the DPCA treatment at approximately 5 years on the study and to reconnect at around year 9. Both survival plots end with approximately 25%-30% surviving.
+
+Attempted to stratify on Stage and there was not enough data for it to prove fruitful or give any real information.
+
+## Log-Rank Test
+```{r}
+# Log-Rank Test of Equality of Survival Distributions (NULL: equal) assuming PH
+logrank <- survdiff(Surv(pbc.df$survtime, pbc.df$status)~trt ,data=pbc.df)
+logrank
+```
+
+Null hypothesis: Both groups have identical distribution curves.
+Alternative hypothesis: Both groups have different distribution curves.
+
+Interpretation:
+Do NOT reject the null (p-value = 0.5). This data provides NO statistically significant evidence that the survival distributions differ, which can be confirmed by the plot above.
+
+This is likely because such small numbers in the sample do not have the power to rule out a real difference and avoid a type two error (false negative).
+
+
+
+
+## Weibul Model?
+```{r}
+t <- c(km.trt$time)
+surv <- c(km.trt$surv)
+loglogsurv <- log(-log(surv))
+logt <- log(t)
+plot(logt, loglogsurv)
+result.lm <- lm(loglogsurv ~ logt)
+abline(result.lm)
+```
+In order to check if the Weibull model is a good fit for the data, plot $log(-log \hat{S})$ against $log(t)$. If the plot is approximately a straight line, which it is, we can conclude that the weibull model may be a good fit for the data.
+
+```{r}
+surv.weib <- survreg(Surv(survtime, status) ~ trt, data = pbc.df, dist="weibull")
+summary(surv.weib)
+```
+From the Chi-Sq test, with a p-value of 0.56, the model is not significant. The only variable that is significant is the intercept.
+
+# Cox Proportional Hazard Model
+The Cox proportional hazards will show the increased rate of having an event in one curve versus the other.
+
+## Predictor = Treatment
+```{r}
+# Single predictor = trt 0/1
+fit_rx <- coxph(Surv(survtime, status)~trt, data=pbc.df)
+summary(fit_rx)
+```
+Here we have a hazard ratio estimate of exp(coef) = 0.8859, with 95% CI (0.6103, 1.286).
+The hazard ratio is the multiplicative effect of the covariate (here, being in the control group or having the DPCA treatment) on the hazard function for PBC. Since the hazard ratio is < 1, we can see that there is a decrease in the hazard.
+Interpretation:
+Relative to CONTROLS, patients randomized to DPCA have a lower hazard of death (.88) at all times of follow-up under the assumption of Proportional Hazards. This is not statistically significant however (p-value = 0.5) and the CI includes the “no association” null value of 1.
+
+## Predictor = Stage
+```{r}
+# Single predictor = stage Nominal - must declare as factor
+fit_stage <- coxph(Surv(survtime, status)~factor(stage), data=pbc.df)
+summary(fit_stage)
+```
+
+Here we have a hazard ratio estimate for stage 2 exp(coef) = 3.808, with 95% CI (0.5003, 28.99). The hazard ratio is the multiplicative effect of stage 2 on the hazard function for PBC. Since the hazard ratio is > 1, we can see that there is an increase in the hazard for stage 2. 
+
+We have a hazard ratio estimate for stage 3 exp(coef) = 6.873, with 95% CI (0.9437, 50.05). The hazard ratio is the multiplicative effect of stage 3 on the hazard function for PBC. Since the hazard ratio is > 1, we can see that there is an increase in the hazard for stage 3. 
+
+We have a hazard ratio estimate for stage 4 exp(coef) = 16.632, with 95% CI (2.2932, 120.63). The hazard ratio is the multiplicative effect of stage 4 on the hazard function for PBC. Since the hazard ratio is > 1, we can see that there is an increase in the hazard for stage 4. 
+
+All of this makes logical sense being that the more severe the case, the higher the hazard.
+
+Interpretation: 
+Recall that higher stage (stage = 1, 2, 3, 4) represent greater level of liver tissue damage present at diagnosis. This model shows that higher (“worse”) stage at diagnosis are associated with poorer prognosis (Hazard ratio estimates increase from 1 to 3.808 to 6.873 to 16.632, relative to the reference group stage=1. This is highly statistically significant (p-value < < .0001). 
+
+## Predictor = Billirubin
+```{r}
+# Single predictor = bilirubin. Continuous
+fit_bili <- coxph(Surv(survtime, status)~bili, data=pbc.df)
+summary(fit_bili)
+```
+Here we have a hazard ratio estimate of exp(coef) = 1.156, with 95% CI (1.126, 1.188).
+The hazard ratio is the multiplicative effect of Bilirubin on the hazard function for PBC. Since the hazard ratio is > 1, we can see that there is an increase in the hazard.
+
+Interpretation:
+Associated with each 1 unit (1 mg/dl) increase in bilirubin is an increased risk of death at all times of follow-up (HR = 1.156). This is highly statistically significant (p-value < < .0001).
+
+## Single Models Side-by-Side
+```{r}
+# Display models side-by-side
+stargazer::stargazer(fit_rx, fit_stage,fit_bili,
+ type="text",
+title="Single Predictor Logistic Regression Models",
+dep.var.labels=c("y=status (1=died)"),
+ column.labels = c("rx", "histol", "bilirubin"))
+```
+
+## Nested Model Building
+```{r}
+# KEY: Every model will contain primary predictor of interest = rx
+# model 1: rx
+modelrx <- coxph(Surv(survtime, status)~trt,data=pbc.df)
+summary(modelrx)
+AIC(modelrx)
+```
+See above explanation.
+The AIC value is 1101.975, which will be our starting. We are looking to reduces this number with the following models.
+
+```{r}
+# model 2: stage + rx
+modelstagerx <- coxph(Surv(survtime, status) ~ trt + stage,data=pbc.df)
+summary(modelstagerx)
+AIC(modelstagerx)
+```
+The p-value for all three overall tests (likelihood, Wald, and score) are significant, indicating that the model is significant. These tests evaluate the null hypothesis that all of the betas are 0. In the above example, the test statistics are in close agreement, and the null hypothesis is rejected.
+
+The only covariate that seems to be statistically significant in the model is Stage 4, while treatment and stages 2 and 3 are not. The AIC value is 1063.704. This is less than the model that only had treatment included as a covariate. 
+
+```{r}
+# model 3: bilirubin + rx
+modelbilirx <- coxph(Surv(survtime, status) ~ trt + bili, data=pbc.df)
+summary(modelbilirx)
+AIC(modelbilirx)
+```
+The p-value for all three overall tests (likelihood, Wald, and score) are significant, indicating that the model is significant. These tests evaluate the null hypothesis that all of the betas are 0. In the above example, the test statistics are in close agreement, and the null hypothesis is rejected.
+
+Bilirubin seems to be statistically significant in the model, while treatment is not. The AIC value for the model is 1029.54, which is lower than the previous three models.
+
+```{r}
+# model 4: rx + stage + bilirubin
+modelbilistagerx <- coxph(Surv(survtime, status) ~ trt + factor(stage) + bili, data=pbc.df)
+summary(modelbilistagerx)
+AIC(modelbilistagerx)
+```
+The p-value for all three overall tests (likelihood, Wald, and score) are significant, indicating that the model is significant. These tests evaluate the null hypothesis that all of the betas are 0. In the above example, the test statistics are in close agreement, and the null hypothesis is rejected. Bilirubin and stage 4 seems to be statistically significant in the model, while treatment is not.
+
+Using the AIC estimates, out of the 4 models created, model 4 that include treatment, stage, and bilirubin is the best. Now lets use StepAIC with all of the variables. 
+
+```{r}
+# Side by side: betas with 95% CI
+stargazer::stargazer(modelrx, modelstagerx, modelbilirx, modelbilistagerx,
+ type="text",
+ci=TRUE,
+title="Multivariable Logistic Regression Models: 95% CI",
+dep.var.labels=c("y=status (1=died)"))
+```
+
+# LR Tests
+Likelihood Ratio Test Comparison of “Reduced” v “Full” Models
+Requires fit of both models first
+```{r}
+# Reduced = stage
+# Full = stage + rx
+anova(fit_stage,modelstagerx)
+```
+Interpretation: Do not reject. After adjustment for stage, randomization to DPCA is NOT associated with survival (LR Test p-value =  0.2185)
+
+```{r}
+# Reduced = bilirubin
+# Full = bilirubin + rx
+anova(fit_bili,modelbilirx)
+```
+Interpretation: Do not reject. After adjustment for bilirubin, randomization to DPCA is NOT associated with survival (LR Test p-value = 0.1673)
+
+```{r}
+# Reduced = stage + bilirubin
+# Full = stage + bilirubin + rx
+modelstagebili <- coxph(Surv(survtime, status) ~ stage+bili, data=pbc.df)
+anova(modelstagebili,modelbilistagerx)
+```
+Interpretation: Do not reject. After adjustment for both stage and bilirubin, randomization to DPCA is NOT associated with survival (LR Test p-value = 0.1916)
+
+## Regression Diagnostics for Cox PH Model
+
+### Test of Proportional Hazards
+
+Goal. For rare events, a hazard ratio may be interpreted as a relative risk. The assumption of proportional hazards says that the hazard ratio, comparing “exposed” versus “not exposed” or a the effect of a unit increase in exposure, is constant over time.
+ 
+Test. The test of the assumption of proportional hazards has NULL: proportional hazards assumption is true.
+Thus, we hope to retain the null!
+ 
+```{r}
+modelall.cox <- coxph(Surv(survtime, status) ~ . - time - id, data = pbc.df)
+# Preliminary - Test the proportional hazards assumption
+test.ph <- cox.zph(modelall.cox, transform="km", global=TRUE)
+test.ph
+```
+From the test of proportional hazards the only ones to fail are Bilirubin, Cholesterol, Triglycerides, and Blood Clotting Time. Thus, for the rest of the variables without statistically significant test resukts, we can assume the proportional hazards. To confirm this, we will look at the graphs of the Schoenfeld residuals against the transformed time for each variable. 
+
+### Graphical Assessment of Proportional Hazards
+
+Graphical Assessments. When the assumption of proportional hazards is true, you should seen the following in your graphical assessments
+
+Plot of Y=survival function versus X=Time over Groups = Exposure (1=yes, 0=no)
+Look for: parallel curves
+
+Plot of Y=ln(-ln(survival function)) versus X=ln(Time) over Groups=Exposure (1=yes, 0=no)
+Look for: parallel lines
+
+Plot of Y=scaled Schoenfeld residuals associated with predictor versus X=Time
+For each predictor, an enhanced model that allows for the inclusion of time dependency is considered. The assumption of proportional hazards will be indicated by a NON-zero slope for the added time-dependent predictor. From this model, one obtains the Schoenfeld residuals which are then plotted.
+Look for: Even band of scaled residuals centered at 0 on the y-axis
+
+```{r}
+# Graphical Assessment of proportional hazards assumption
+# Plot Scaled Schoenfeld residuals v time (Look for even band at 0)
+
+# Treatment
+plot(test.ph[1],main="Treatment")
+abline(h=0)
+
+# Age
+plot(test.ph[2], main="Age")
+abline(h=0)
+
+# Sex
+plot(test.ph[3], main="Sex")
+abline(h=0)
+
+# Ascites
+plot(test.ph[4],main="Ascites")
+abline(h=0)
+
+# Hepato
+plot(test.ph[5], main="Hepato")
+abline(h=0)
+
+# Spiders
+plot(test.ph[6], main="Spiders")
+abline(h=0)
+
+# Edema
+plot(test.ph[7],main="Edema")
+abline(h=0)
+
+# Cholesterol
+plot(test.ph[8], main="Cholesterol")
+abline(h=0)
+
+# Albumin
+plot(test.ph[9], main="Albumin")
+abline(h=0)
+
+# Copper
+plot(test.ph[10],main="Copper")
+abline(h=0)
+
+# Alkaline Phosphatase
+plot(test.ph[11], main="Alkaline Phosphatase")
+abline(h=0)
+
+# AST
+plot(test.ph[12], main="AST")
+abline(h=0)
+
+# Triglycerides
+plot(test.ph[13], main="Triglycerides")
+abline(h=0)
+
+# Platelet
+plot(test.ph[14], main="Platelet")
+abline(h=0)
+
+# Blood Clotting Time
+plot(test.ph[15],main="Blood Clotting Time")
+abline(h=0)
+
+# Stage
+plot(test.ph[16], main="Stage")
+abline(h=0)
+
+```
+In the figure above, the solid line is a smoothing spline fit to the plot, with the dashed lines representing a +-2 sigma band around the fit.
+
+From the graphical inspection, there seems to be no true pattern with time. The assumption of proportional hazards appears to be supported for the covariates.
+
+### Testing Influential Observations
+```{r}
+ggcoxdiagnostics(modelall.cox, type = "dfbeta",
+                 linear.predictions = FALSE, ggtheme = theme_bw())
+```
+
+The above index plots show that comparing the magnitudes of the largest dfbeta values to the regression coefficients suggests that none of the observations is terribly influential individually, even though some of the dfbeta values are large compared with the others.
+
+It’s also possible to check outliers by visualizing the deviance residuals. The deviance residual is a normalized transform of the martingale residual. These residuals should be roughly symmetrically distributed about zero with a standard deviation of 1. This can be seen below.
+
+Positive values correspond to individuals that “died too soon” compared to expected survival times.
+Negative values correspond to individual that “lived too long”.
+Very large or small values are outliers, which are poorly predicted by the model
+
+```{r}
+ggcoxdiagnostics(modelall.cox, type = "deviance",
+                 linear.predictions = FALSE, ggtheme = theme_bw())
+```
+The pattern looks fairly symmetric around 0.
+
+
+## Akaike Information Criterion 
+
+```{r}
+result.step <- step(modelall.cox, scope=list(upper=~ trt + 
+            age + sex + ascites + hepato + 
+            spiders + edema + bili + 
+            chol + albumin + copper + alk.phos + ast + trig + platelet + protime + 
+            stage, lower=~trt) )
+result.step
+```
+ 
+Thus, the best fitting model for the data includes:
+- Treatment
+- Age
+- Edema
+- Bilirubin
+- Albumin
+- Copper
+- AST 
+- Blood Clotting Time
+- Stage
+
+The p-value for the likelihood ratio test is significant, indicating that the model is significant. This test evaluates the null hypothesis that all of the betas ($\beta$) are 0. In the above data, the null hypothesis is rejected.
+
+All of the covariates seem to be significant, with the exception of treatment, edema (0.5), stage 2, and stage 3. 
+
+The p-value for bilirubin is 0.00000985, with a hazard ratio HR = exp(coef) = 1.0924689, indicating a strong relationship between the patients’ bilirubin level and increased risk of death. Thus,  holding the other covariates constant, having a high level of bilirubin is associated with poor survival.
+
+Similarly, the p-value for age is 0.00448, with a hazard ratio HR = exp(coef) = 1.0300346, indicating a strong relationship between the patients’ age and increased risk of death. Thus, holding the other covariates constant, having a higher age is associated with poor survival.
+
+In contrast, the p-value for stage 2 is p=0.20103. The hazard ratio HR = exp(coef) = 3.9623257. Thus, these results indicate that stage 2 makes a smaller contribution to the difference in the Hazard Ratio after adjusting for the other covariates.
+
+
+
+```{r}
+surv.weib <- survreg(Surv(survtime, status) ~ trt + age + edema + bili + albumin + copper + ast + protime + stage, data = pbc.df, dist="weibull")
+summary(surv.weib)
+```
+
+Conclusion:
+From the analysis above, we used the Kaplan-Meier method, Log-Rank test, fitted a Weibull model, performed Nested Models, Cox Proportional Hazards, tested assumptions, and ran step-AIC on the data. From the Kaplan-Meier using treatment as a predictor we can see that the that the median survival time for patients randomized to the DPCA treatment is 8.45 years, with a 95% Confidence interval of (6.54, 11.2). The median survival time for patients randomized to the control is 9.39 years, with a 95% Confidence interval of (8.47, 10.6). The survival distributions seem to be very similar, with the control dropping slightly below the DPCA treatment at approximately 5 years on the study and to reconnect at around year 9. Both survival plots end with approximately 25%-30% surviving. We looked at nested models and found that the best model out of the four models built was the model that included stage, bilirubin, and treatment. We used the step-AIC to find that Treatment, Age, Edema, Bilirubin, Albumin, Copper, AST, Blood Clotting Time, and Stage have an effect on survival of patients with Primary Biliary Cholangitis. Using this model we tested the assumptions and for the most part, all assumptions were met.
+
+
+
+
+
+
+
+
+
+
+
+
+
